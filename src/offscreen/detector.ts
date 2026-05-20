@@ -50,7 +50,8 @@ async function start(calibrate: boolean = false): Promise<void> {
     await video.play();
     landmarker = landmarker ?? await initLandmarker();
     running = true;
-    loop();
+    if (loopHandle !== null) clearInterval(loopHandle);
+    loopHandle = setInterval(loop, 33);  // ~30fps; offscreen docs don't paint so rVFC never fires.
   } catch (e) {
     send({ kind: 'error', code: 'camera', message: String(e) });
   }
@@ -58,10 +59,13 @@ async function start(calibrate: boolean = false): Promise<void> {
 
 function stop(): void {
   running = false;
+  if (loopHandle !== null) { clearInterval(loopHandle); loopHandle = null; }
   stream?.getTracks().forEach(t => t.stop());
   stream = null;
   video.srcObject = null;
 }
+
+let loopHandle: ReturnType<typeof setInterval> | null = null;
 
 function loop(): void {
   if (!running || !landmarker) return;
@@ -94,7 +98,6 @@ function loop(): void {
     else if (ev.type === 'face_lost') send({ kind: 'face_lost', t: ev.t });
     else if (ev.type === 'face_present') send({ kind: 'face_present', t: ev.t });
   }
-  video.requestVideoFrameCallback(() => loop());
 }
 
 chrome.runtime.onMessage.addListener((msg: { from: string; payload: ControlMsg }) => {
