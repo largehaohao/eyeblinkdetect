@@ -9,6 +9,8 @@ let landmarker: FaceLandmarker | null = null;
 let fsm: ReturnType<typeof createBlinkFSM> | null = null;
 let stream: MediaStream | null = null;
 let running = false;
+let calibrating = false;
+const calibSamples: number[] = [];
 
 async function initLandmarker(): Promise<FaceLandmarker> {
   const vision = await FilesetResolver.forVisionTasks(
@@ -30,8 +32,10 @@ function send(msg: DetectorMsg): void {
   chrome.runtime.sendMessage({ from: 'offscreen', payload: msg }).catch(() => {});
 }
 
-async function start(): Promise<void> {
+async function start(calibrate: boolean = false): Promise<void> {
   if (running) return;
+  calibrating = calibrate;
+  calibSamples.length = 0;
   try {
     const settings = await loadSettings();
     fsm = createBlinkFSM({
@@ -73,6 +77,17 @@ function loop(): void {
   } catch (e) {
     send({ kind: 'error', code: 'inference', message: String(e) });
   }
+  if (calibrating && face) {
+    calibSamples.push(ear);
+    if (calibSamples.length >= 300) {
+      const sorted = [...calibSamples].sort((a, b) => a - b);
+      const p75 = sorted[Math.floor(sorted.length * 0.75)]!;
+      const openThresh = p75 * 0.8;
+      const closeThresh = openThresh * 0.8;
+      calibrating = false;
+      send({ kind: 'calibration_done', closeThresh, openThresh });
+    }
+  }
   const events = fsm!.feed(Date.now(), ear, face);
   for (const ev of events) {
     if (ev.type === 'blink') send({ kind: 'blink', t: ev.t });
@@ -86,6 +101,7 @@ chrome.runtime.onMessage.addListener((msg: { from: string; payload: ControlMsg }
   if (msg.from !== 'sw') return;
   if (msg.payload.kind === 'start') start();
   else if (msg.payload.kind === 'stop') stop();
+  else if (msg.payload.kind === 'recalibrate') { stop(); start(true); }
 });
 
 send({ kind: 'face_present', t: Date.now() }); // signal offscreen is alive; SW will overwrite state
