@@ -1,0 +1,190 @@
+import { createAggregator, type MinuteBucket } from '@/lib/aggregator';
+import { shouldRemind } from '@/lib/reminder-policy';
+import { writeMinute, getRange, writeSession } from '@/lib/db';
+import { loadSettings, saveSettings } from '@/lib/settings';
+import type { DetectorMsg, ControlMsg, UIQuery, UIEvent } from '@/lib/messages';
+
+type AppState = 'OFF' | 'RUNNING' | 'PAUSED' | 'ABSENT';
+
+const SESSION_KEY = 'sessionState';
+const agg = createAggregator();
+const recentBuckets: MinuteBucket[] = [];
+let currentMinuteStart: number | null = null;
+let lastReminderAt = 0;
+let sessionId = '';
+let state: AppState = 'OFF';
+
+function nowMinute(): number {
+  return Math.floor(Date.now() / 60_000) * 60_000;
+}
+
+async function setState(s: AppState): Promise<void> {
+  state = s;
+  await chrome.storage.session.set({ [SESSION_KEY]: { state, sessionId, lastReminderAt } });
+  await broadcast({ kind: 'state_changed', state });
+  await updateBadge();
+}
+
+async function updateBadge(): Promise<void> {
+  if (state === 'OFF') { chrome.action.setBadgeText({ text: '' }); return; }
+  if (state === 'RUNNING') { chrome.action.setBadgeText({ text: 'ON' }); chrome.action.setBadgeBackgroundColor({ color: '#16a34a' }); return; }
+  if (state === 'PAUSED') { chrome.action.setBadgeText({ text: 'II' }); chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' }); return; }
+  if (state === 'ABSENT') { chrome.action.setBadgeText({ text: '?' }); chrome.action.setBadgeBackgroundColor({ color: '#64748b' }); }
+}
+
+async function ensureOffscreen(): Promise<void> {
+  const has = await chrome.offscreen.hasDocument?.() ?? false;
+  if (has) return;
+  await chrome.offscreen.createDocument({
+    url: chrome.runtime.getURL('src/offscreen/offscreen.html'),
+    reasons: ['USER_MEDIA' as chrome.offscreen.Reason],
+    justification: 'Webcam-based blink detection'
+  });
+}
+
+async function closeOffscreen(): Promise<void> {
+  const has = await chrome.offscreen.hasDocument?.() ?? false;
+  if (has) await chrome.offscreen.closeDocument();
+}
+
+function postToOffscreen(payload: ControlMsg): void {
+  chrome.runtime.sendMessage({ from: 'sw', payload }).catch(() => {});
+}
+
+async function broadcast(ev: UIEvent): Promise<void> {
+  chrome.runtime.sendMessage({ from: 'sw_ui', payload: ev }).catch(() => {});
+}
+
+async function startSession(): Promise<void> {
+  sessionId = crypto.randomUUID();
+  await writeSession({ sessionId, startedAt: Date.now(), endedAt: null, reason: 'manual' });
+  await ensureOffscreen();
+  postToOffscreen({ kind: 'start' });
+  currentMinuteStart = nowMinute();
+  chrome.alarms.create('tick', { periodInMinutes: 1 });
+  await setState('RUNNING');
+}
+
+async function stopSession(reason: 'manual' | 'idle' | 'error'): Promise<void> {
+  postToOffscreen({ kind: 'stop' });
+  await closeOffscreen();
+  if (sessionId) {
+    await writeSession({ sessionId, startedAt: 0, endedAt: Date.now(), reason });
+  }
+  chrome.alarms.clear('tick');
+  await setState('OFF');
+}
+
+function handleDetector(m: DetectorMsg): void {
+  if (m.kind === 'blink') agg.onEvent({ type: 'blink', t: m.t });
+  else if (m.kind === 'face_lost') { agg.onEvent({ type: 'face_lost', t: m.t }); void setState('ABSENT'); }
+  else if (m.kind === 'face_present') { agg.onEvent({ type: 'face_present', t: m.t }); if (state === 'ABSENT') void setState('RUNNING'); }
+  else if (m.kind === 'error') { console.error('detector error', m); void stopSession('error'); }
+  else if (m.kind === 'calibration_done') {
+    void saveSettings({ ear: { closeThresh: m.closeThresh, openThresh: m.openThresh, personalized: true } });
+  }
+}
+
+async function handleUI(q: UIQuery): Promise<unknown> {
+  if (q.kind === 'status') return { state, sessionId, lastReminderAt };
+  if (q.kind === 'toggle') {
+    if (q.on && state === 'OFF') await startSession();
+    if (!q.on && state !== 'OFF') await stopSession('manual');
+    return { state };
+  }
+  if (q.kind === 'recent_minutes') return getRange(q.sinceMs, Date.now() + 60_000);
+  if (q.kind === 'range') return getRange(q.fromMs, q.toMs);
+  if (q.kind === 'settings_get') return loadSettings();
+  if (q.kind === 'settings_set') return saveSettings(q.patch as any);
+  if (q.kind === 'recalibrate') {
+    postToOffscreen({ kind: 'recalibrate' });
+    return { ok: true };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.from === 'offscreen') {
+    handleDetector(msg.payload as DetectorMsg);
+    return;
+  }
+  if (msg?.from === 'ui') {
+    handleUI(msg.payload as UIQuery).then(sendResponse);
+    return true;
+  }
+});
+
+chrome.alarms.onAlarm.addListener(async (a) => {
+  if (a.name !== 'tick') return;
+  if (state === 'OFF' || currentMinuteStart === null) return;
+  const start = currentMinuteStart;
+  const end = start + 60_000;
+  const bucket = agg.flush(start, end);
+  await writeMinute({ tsMinute: start, ...bucket, sessionId });
+  recentBuckets.push(bucket);
+  if (recentBuckets.length > 60) recentBuckets.shift();
+  currentMinuteStart = end;
+  await broadcast({ kind: 'minute_committed', tsMinute: start });
+
+  const settings = await loadSettings();
+  if (settings.reminderModes.systemNotification || settings.reminderModes.fullscreenOverlay) {
+    const cfg = {
+      lowBpm: settings.threshold.lowBpm,
+      windowMinutes: settings.threshold.windowMinutes,
+      sustainMinutes: settings.threshold.sustainMinutes,
+      cooldownMs: settings.cooldownMinutes * 60_000
+    };
+    if (shouldRemind(recentBuckets, lastReminderAt, cfg, Date.now())) {
+      await fireReminder(settings);
+      lastReminderAt = Date.now();
+      await chrome.storage.session.set({ [SESSION_KEY]: { state, sessionId, lastReminderAt } });
+    }
+  }
+});
+
+async function fireReminder(settings: Awaited<ReturnType<typeof loadSettings>>): Promise<void> {
+  if (settings.reminderModes.systemNotification) {
+    chrome.notifications.create('low-blink', {
+      type: 'basic',
+      iconUrl: 'src/icons/icon-128.png',
+      title: 'Eyes need a break',
+      message: 'Your blink rate has been low. Look at something 20ft away for 20 seconds.',
+      priority: 2
+    });
+  }
+  if (settings.reminderModes.fullscreenOverlay) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['src/content/overlay.ts']
+        });
+      } catch { /* restricted page */ }
+    }
+  }
+}
+
+chrome.idle.onStateChanged.addListener(async (newState) => {
+  if (newState === 'active' && state === 'PAUSED') {
+    postToOffscreen({ kind: 'start' });
+    await setState('RUNNING');
+  } else if ((newState === 'idle' || newState === 'locked') && state === 'RUNNING') {
+    postToOffscreen({ kind: 'stop' });
+    await setState('PAUSED');
+  }
+});
+chrome.idle.setDetectionInterval(60);
+
+chrome.runtime.onStartup.addListener(async () => {
+  const data = await chrome.storage.session.get(SESSION_KEY);
+  const saved = data[SESSION_KEY] as { state?: AppState; sessionId?: string; lastReminderAt?: number } | undefined;
+  if (saved?.state && saved.state !== 'OFF') {
+    sessionId = saved.sessionId ?? '';
+    lastReminderAt = saved.lastReminderAt ?? 0;
+    await startSession();
+  }
+});
+
+chrome.runtime.onInstalled.addListener(async () => {
+  await setState('OFF');
+});
