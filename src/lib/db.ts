@@ -15,8 +15,13 @@ export type SessionRow = {
   reason: 'manual' | 'idle' | 'error';
 };
 
+export type BlinkRow = {
+  t: number;          // blink timestamp (ms since epoch)
+  sessionId: string;
+};
+
 const DB_NAME = 'eye-blink-detect';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -32,6 +37,9 @@ export function openDB(): Promise<IDBPDatabase> {
         }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings');
+        }
+        if (!db.objectStoreNames.contains('blinks')) {
+          db.createObjectStore('blinks', { keyPath: 't' });
         }
       }
     });
@@ -79,11 +87,24 @@ export async function writeSetting<T>(key: string, value: T): Promise<void> {
   await db.put('settings', value, key);
 }
 
+export async function writeBlink(row: BlinkRow): Promise<void> {
+  const db = await openDB();
+  await db.put('blinks', row);
+}
+
+export async function getBlinks(fromMs: number, toMs: number): Promise<BlinkRow[]> {
+  const db = await openDB();
+  const range = IDBKeyRange.bound(fromMs, toMs, false, true);
+  const rows = await db.getAll('blinks', range);
+  return rows.sort((a, b) => a.t - b.t);
+}
+
 export async function clearAll(): Promise<void> {
   const db = await openDB();
   await Promise.all([
     db.clear('minutes'),
     db.clear('sessions'),
-    db.clear('settings')
+    db.clear('settings'),
+    db.clear('blinks')
   ]);
 }

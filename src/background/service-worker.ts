@@ -1,6 +1,6 @@
 import { createAggregator, type MinuteBucket } from '@/lib/aggregator';
 import { shouldRemind } from '@/lib/reminder-policy';
-import { writeMinute, getRange, writeSession, updateSessionEnd } from '@/lib/db';
+import { writeMinute, getRange, writeSession, updateSessionEnd, writeBlink, getBlinks } from '@/lib/db';
 import { loadSettings, saveSettings } from '@/lib/settings';
 import type { DetectorMsg, ControlMsg, UIQuery, UIEvent } from '@/lib/messages';
 
@@ -94,7 +94,10 @@ async function stopSession(reason: 'manual' | 'idle' | 'error'): Promise<void> {
 }
 
 function handleDetector(m: DetectorMsg): void {
-  if (m.kind === 'blink') agg.onEvent({ type: 'blink', t: m.t });
+  if (m.kind === 'blink') {
+    agg.onEvent({ type: 'blink', t: m.t });
+    void writeBlink({ t: m.t, sessionId });
+  }
   else if (m.kind === 'face_lost') { agg.onEvent({ type: 'face_lost', t: m.t }); void setState('ABSENT'); }
   else if (m.kind === 'face_present') { agg.onEvent({ type: 'face_present', t: m.t }); if (state === 'ABSENT') void setState('RUNNING'); }
   else if (m.kind === 'error') { console.error('detector error', m); void stopSession('error'); }
@@ -112,6 +115,7 @@ async function handleUI(q: UIQuery): Promise<unknown> {
   }
   if (q.kind === 'recent_minutes') return getRange(q.sinceMs, Date.now() + 60_000);
   if (q.kind === 'range') return getRange(q.fromMs, q.toMs);
+  if (q.kind === 'blinks_range') return getBlinks(q.fromMs, q.toMs);
   if (q.kind === 'settings_get') return loadSettings();
   if (q.kind === 'settings_set') return saveSettings(q.patch as any);
   if (q.kind === 'recalibrate') {

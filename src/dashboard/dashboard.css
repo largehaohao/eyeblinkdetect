@@ -5,6 +5,8 @@ nav button { margin-right: 6px; padding: 4px 10px; cursor: pointer; }
 nav button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 main { padding: 24px; display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 1024px; margin: 0 auto; }
 .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
+.card h2 { margin: 0 0 12px 0; font-size: 14px; color: #334155; font-weight: 600; }
+.hint { margin-top: 8px; font-size: 12px; color: #64748b; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .stat-label { color: #64748b; font-size: 12px; }
 .stat-value { font-size: 28px; font-weight: 600; }

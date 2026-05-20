@@ -1,6 +1,6 @@
 import Chart from 'chart.js/auto';
 import type { UIQuery } from '@/lib/messages';
-import type { MinuteRow } from '@/lib/db';
+import type { MinuteRow, BlinkRow } from '@/lib/db';
 import type { Settings } from '@/lib/settings';
 
 function sendUI<T>(q: UIQuery): Promise<T> {
@@ -15,11 +15,44 @@ const RANGES = {
 } as const;
 
 let chart: Chart | null = null;
+let blinkChart: Chart | null = null;
 
 async function loadRange(rangeKey: keyof typeof RANGES): Promise<void> {
   const fromMs = rangeKey === 'all' ? 0 : Date.now() - RANGES[rangeKey];
-  const rows = await sendUI<MinuteRow[]>({ kind: 'range', fromMs, toMs: Date.now() + 60_000 });
+  const toMs = Date.now() + 60_000;
+  const [rows, blinks] = await Promise.all([
+    sendUI<MinuteRow[]>({ kind: 'range', fromMs, toMs }),
+    sendUI<BlinkRow[]>({ kind: 'blinks_range', fromMs, toMs })
+  ]);
   render(rows);
+  renderBlinks(blinks, fromMs, toMs);
+}
+
+function renderBlinks(blinks: BlinkRow[], fromMs: number, toMs: number): void {
+  const points = blinks.map(b => ({ x: b.t, y: 1 }));
+  document.getElementById('blink-count')!.textContent =
+    `${blinks.length} blink${blinks.length === 1 ? '' : 's'} in range` +
+    (blinks.length > 0 ? ` · last at ${new Date(blinks[blinks.length - 1]!.t).toLocaleTimeString()}` : '');
+
+  const canvas = document.getElementById('blink-chart') as HTMLCanvasElement;
+  if (!blinkChart) {
+    blinkChart = new Chart(canvas, {
+      type: 'scatter',
+      data: { datasets: [{ label: 'blink', data: points, pointRadius: 3, backgroundColor: '#dc2626' }] },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { type: 'linear', min: fromMs, max: toMs, ticks: { callback: (v) => new Date(Number(v)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } },
+          y: { display: false, min: 0, max: 2 }
+        }
+      }
+    });
+  } else {
+    blinkChart.data.datasets[0]!.data = points as any;
+    (blinkChart.options.scales!.x as any).min = fromMs;
+    (blinkChart.options.scales!.x as any).max = toMs;
+    blinkChart.update('none');
+  }
 }
 
 function render(rows: MinuteRow[]): void {

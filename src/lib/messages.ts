@@ -14,6 +14,7 @@ export type UIQuery =
   | { kind: 'status' }
   | { kind: 'recent_minutes'; sinceMs: number }
   | { kind: 'range'; fromMs: number; toMs: number }
+  | { kind: 'blinks_range'; fromMs: number; toMs: number }
   | { kind: 'settings_get' }
   | { kind: 'settings_set'; patch: Record<string, unknown> }
   | { kind: 'toggle'; on: boolean }
