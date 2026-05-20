@@ -1,6 +1,6 @@
 import { createAggregator, type MinuteBucket } from '@/lib/aggregator';
 import { shouldRemind } from '@/lib/reminder-policy';
-import { writeMinute, getRange, writeSession } from '@/lib/db';
+import { writeMinute, getRange, writeSession, updateSessionEnd } from '@/lib/db';
 import { loadSettings, saveSettings } from '@/lib/settings';
 import type { DetectorMsg, ControlMsg, UIQuery, UIEvent } from '@/lib/messages';
 
@@ -69,7 +69,7 @@ async function stopSession(reason: 'manual' | 'idle' | 'error'): Promise<void> {
   postToOffscreen({ kind: 'stop' });
   await closeOffscreen();
   if (sessionId) {
-    await writeSession({ sessionId, startedAt: 0, endedAt: Date.now(), reason });
+    await updateSessionEnd(sessionId, Date.now(), reason);
   }
   chrome.alarms.clear('tick');
   await setState('OFF');

@@ -62,6 +62,13 @@ export async function writeSession(row: SessionRow): Promise<void> {
   await db.put('sessions', row);
 }
 
+export async function updateSessionEnd(sessionId: string, endedAt: number, reason: SessionRow['reason']): Promise<void> {
+  const db = await openDB();
+  const existing = await db.get('sessions', sessionId) as SessionRow | undefined;
+  if (!existing) return;  // session was never started; nothing to update
+  await db.put('sessions', { ...existing, endedAt, reason });
+}
+
 export async function readSetting<T>(key: string): Promise<T | undefined> {
   const db = await openDB();
   return db.get('settings', key);
