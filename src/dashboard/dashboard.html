@@ -8,23 +8,39 @@
 <body>
   <header>
     <h1>Eye Blink Dashboard</h1>
-    <nav>
-      <button data-range="day">Today</button>
-      <button data-range="week">7 days</button>
-      <button data-range="month">30 days</button>
-      <button data-range="all">All</button>
-    </nav>
   </header>
 
   <main>
     <section class="card">
-      <h2>Per-minute BPM</h2>
+      <div class="row">
+        <h2>Per-minute BPM</h2>
+        <nav class="sub-nav" id="bpm-range-nav">
+          <button data-range="6h">6h</button>
+          <button data-range="12h">12h</button>
+          <button data-range="day">Today</button>
+          <button data-range="week">7d</button>
+          <button data-range="month">30d</button>
+          <button data-range="all">All</button>
+        </nav>
+      </div>
       <canvas id="main-chart" width="900" height="260"></canvas>
     </section>
 
     <section class="card">
-      <h2>Raw blink events</h2>
-      <canvas id="blink-chart" width="900" height="120"></canvas>
+      <div class="row">
+        <h2>Raw blink events</h2>
+        <div class="row-actions">
+          <button class="sound-toggle" id="sound-toggle" type="button">Sound on</button>
+          <nav class="sub-nav" id="blink-range-nav">
+            <button data-blink-range="1m">1 min</button>
+            <button data-blink-range="5m">5 min</button>
+            <button data-blink-range="15m">15 min</button>
+            <button data-blink-range="1h">1 hour</button>
+            <button data-blink-range="all">All in view</button>
+          </nav>
+        </div>
+      </div>
+      <canvas id="blink-chart" width="900" height="140"></canvas>
       <div class="hint" id="blink-count">—</div>
     </section>
 
@@ -34,24 +50,34 @@
       <div><div class="stat-label">Reminders</div><div class="stat-value" id="reminders">—</div></div>
     </section>
 
-    <section class="card">
-      <h2>Settings</h2>
-      <form id="settings-form">
-        <label>Low-BPM threshold <input type="number" name="lowBpm" min="1" max="40"></label>
-        <label>Window (minutes) <input type="number" name="windowMinutes" min="1" max="30"></label>
-        <label>Sustain (minutes) <input type="number" name="sustainMinutes" min="1" max="30"></label>
-        <label>Cooldown (minutes) <input type="number" name="cooldownMinutes" min="1" max="60"></label>
-        <label><input type="checkbox" name="systemNotification"> System notifications</label>
-        <label><input type="checkbox" name="fullscreenOverlay"> Fullscreen overlay</label>
-        <button type="submit">Save</button>
-      </form>
-    </section>
+    <div class="tools-grid">
+      <section class="card settings-card">
+        <div class="section-heading">
+          <h2>Settings</h2>
+          <p>Tune reminder thresholds and delivery modes.</p>
+        </div>
+        <form id="settings-form" class="settings-form">
+          <label class="field">Low-BPM threshold <input type="number" name="lowBpm" min="1" max="40"></label>
+          <label class="field">Window minutes <input type="number" name="windowMinutes" min="1" max="30"></label>
+          <label class="field">Sustain minutes <input type="number" name="sustainMinutes" min="1" max="30"></label>
+          <label class="field">Cooldown minutes <input type="number" name="cooldownMinutes" min="1" max="60"></label>
+          <label class="check-row"><input type="checkbox" name="systemNotification"> System notifications</label>
+          <label class="check-row"><input type="checkbox" name="fullscreenOverlay"> Fullscreen overlay</label>
+          <button class="primary-action" type="submit">Save settings</button>
+        </form>
+      </section>
 
-    <section class="card">
-      <h2>Export</h2>
-      <button id="export-csv">Download CSV</button>
-      <button id="export-json">Download JSON</button>
-    </section>
+      <section class="card export-card">
+        <div class="section-heading">
+          <h2>Export</h2>
+          <p>Download all stored minute buckets for analysis or backup.</p>
+        </div>
+        <div class="export-actions">
+          <button class="export-button" id="export-csv">CSV</button>
+          <button class="export-button" id="export-json">JSON</button>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script type="module" src="./dashboard.ts"></script>

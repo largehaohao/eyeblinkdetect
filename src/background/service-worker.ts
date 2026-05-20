@@ -7,7 +7,7 @@ import type { DetectorMsg, ControlMsg, UIQuery, UIEvent } from '@/lib/messages';
 type AppState = 'OFF' | 'RUNNING' | 'PAUSED' | 'ABSENT';
 
 const SESSION_KEY = 'sessionState';
-const agg = createAggregator();
+let agg = createAggregator();
 const recentBuckets: MinuteBucket[] = [];
 let currentMinuteStart: number | null = null;
 let lastReminderAt = 0;
@@ -74,10 +74,13 @@ async function startSession(): Promise<void> {
     await openPermissionPage();
     return;
   }
+  agg = createAggregator();
+  recentBuckets.length = 0;
   sessionId = crypto.randomUUID();
   await writeSession({ sessionId, startedAt: Date.now(), endedAt: null, reason: 'manual' });
   await ensureOffscreen();
-  postToOffscreen({ kind: 'start' });
+  const settings = await loadSettings();
+  postToOffscreen(settings.ear.personalized ? { kind: 'start' } : { kind: 'recalibrate' });
   currentMinuteStart = nowMinute();
   chrome.alarms.create('tick', { periodInMinutes: 1 });
   await setState('RUNNING');
@@ -90,6 +93,7 @@ async function stopSession(reason: 'manual' | 'idle' | 'error'): Promise<void> {
     await updateSessionEnd(sessionId, Date.now(), reason);
   }
   chrome.alarms.clear('tick');
+  currentMinuteStart = null;
   await setState('OFF');
 }
 
@@ -137,7 +141,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 chrome.alarms.onAlarm.addListener(async (a) => {
   if (a.name !== 'tick') return;
-  if (state === 'OFF' || currentMinuteStart === null) return;
+  if (state !== 'RUNNING' && state !== 'ABSENT') return;
+  if (currentMinuteStart === null) return;
   const start = currentMinuteStart;
   const end = start + 60_000;
   const bucket = agg.flush(start, end);
@@ -203,9 +208,11 @@ function injectOverlay(): void {
 chrome.idle.onStateChanged.addListener(async (newState) => {
   if (newState === 'active' && state === 'PAUSED') {
     postToOffscreen({ kind: 'start' });
+    currentMinuteStart = nowMinute();
     await setState('RUNNING');
-  } else if ((newState === 'idle' || newState === 'locked') && state === 'RUNNING') {
+  } else if ((newState === 'idle' || newState === 'locked') && (state === 'RUNNING' || state === 'ABSENT')) {
     postToOffscreen({ kind: 'stop' });
+    currentMinuteStart = null;
     await setState('PAUSED');
   }
 });

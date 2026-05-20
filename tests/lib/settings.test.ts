@@ -15,5 +15,6 @@ describe('settings', () => {
     const s = await loadSettings();
     expect(s.threshold.lowBpm).toBe(8);
     expect(s.cooldownMinutes).toBe(DEFAULTS.cooldownMinutes);
+    expect(s.audio.rawBlinkSoundMuted).toBe(false);
   });
 });

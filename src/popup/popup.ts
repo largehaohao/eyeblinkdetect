@@ -39,10 +39,13 @@ async function refresh(): Promise<void> {
   if (!chart) {
     chart = new Chart(canvas, {
       type: 'line',
-      data: { labels, datasets: [{ data, borderColor: '#2563eb', tension: 0.3, pointRadius: 0 }] },
+      data: { labels, datasets: [{ data, borderColor: '#14b8a6', backgroundColor: 'rgba(20, 184, 166, 0.16)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }] },
       options: {
         plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true }, x: { display: false } }
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(148, 163, 184, 0.14)' }, ticks: { color: '#9ca3af' } },
+          x: { display: false }
+        }
       }
     });
   } else {
