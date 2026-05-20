@@ -1,9 +1,30 @@
 import { defineConfig } from 'vite';
 import { crx } from '@crxjs/vite-plugin';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 import manifest from './manifest.json';
 
 export default defineConfig({
-  plugins: [crx({ manifest })],
+  plugins: [
+    crx({ manifest }),
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'node_modules/@mediapipe/tasks-vision/wasm/*.{js,wasm}',
+          dest: 'mediapipe-wasm',
+          rename: { stripBase: true }
+        }
+      ]
+    })
+  ],
   resolve: { alias: { '@': '/src' } },
-  build: { target: 'esnext', sourcemap: true }
+  build: {
+    target: 'esnext',
+    sourcemap: true,
+    rollupOptions: {
+      input: {
+        dashboard: 'src/dashboard/dashboard.html',
+        offscreen: 'src/offscreen/offscreen.html'
+      }
+    }
+  }
 });

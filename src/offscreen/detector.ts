@@ -14,7 +14,7 @@ const calibSamples: number[] = [];
 
 async function initLandmarker(): Promise<FaceLandmarker> {
   const vision = await FilesetResolver.forVisionTasks(
-    chrome.runtime.getURL('node_modules/@mediapipe/tasks-vision/wasm')
+    chrome.runtime.getURL('mediapipe-wasm')
   );
   return FaceLandmarker.createFromOptions(vision, {
     baseOptions: {
