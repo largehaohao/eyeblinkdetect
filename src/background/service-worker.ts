@@ -55,7 +55,25 @@ async function broadcast(ev: UIEvent): Promise<void> {
   chrome.runtime.sendMessage({ from: 'sw_ui', payload: ev }).catch(() => {});
 }
 
+async function hasCameraPermission(): Promise<boolean> {
+  try {
+    const status = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    return status.state === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+async function openPermissionPage(): Promise<void> {
+  const url = chrome.runtime.getURL('src/permission/permission.html');
+  await chrome.tabs.create({ url });
+}
+
 async function startSession(): Promise<void> {
+  if (!await hasCameraPermission()) {
+    await openPermissionPage();
+    return;
+  }
   sessionId = crypto.randomUUID();
   await writeSession({ sessionId, startedAt: Date.now(), endedAt: null, reason: 'manual' });
   await ensureOffscreen();

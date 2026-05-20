@@ -23,7 +23,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         dashboard: 'src/dashboard/dashboard.html',
-        offscreen: 'src/offscreen/offscreen.html'
+        offscreen: 'src/offscreen/offscreen.html',
+        permission: 'src/permission/permission.html'
       }
     }
   }
