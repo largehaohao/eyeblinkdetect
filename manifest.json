@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Eye Blink Detector",
+  "version": "0.1.0",
+  "description": "Detects your blink rate via webcam and reminds you to rest your eyes when you slow down.",
+  "permissions": ["storage", "alarms", "offscreen", "notifications", "idle", "scripting"],
+  "host_permissions": [],
+  "background": { "service_worker": "src/background/service-worker.ts", "type": "module" },
+  "action": { "default_popup": "src/popup/popup.html", "default_icon": { "16": "src/icons/icon-16.png", "32": "src/icons/icon-32.png" } },
+  "icons": { "16": "src/icons/icon-16.png", "32": "src/icons/icon-32.png", "48": "src/icons/icon-48.png", "128": "src/icons/icon-128.png" },
+  "web_accessible_resources": [
+    { "resources": ["src/models/face_landmarker.task", "src/dashboard/dashboard.html"], "matches": ["<all_urls>"] }
+  ],
+  "content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';" }
+}
