@@ -1,9 +1,11 @@
 export type Landmark = { x: number; y: number; z?: number };
 
-export const EAR_INDICES = {
+export type EyeIndices = { p1: number; p2: number; p3: number; p4: number; p5: number; p6: number };
+
+export const EAR_INDICES: { left: EyeIndices; right: EyeIndices } = {
   left: { p1: 33, p2: 160, p3: 158, p4: 133, p5: 153, p6: 144 },
   right: { p1: 362, p2: 385, p3: 387, p4: 263, p5: 373, p6: 380 }
-} as const;
+};
 
 function dist(a: Landmark, b: Landmark): number {
   const dx = a.x - b.x;
@@ -11,7 +13,7 @@ function dist(a: Landmark, b: Landmark): number {
   return Math.hypot(dx, dy);
 }
 
-function singleEyeEAR(lms: Landmark[], idx: typeof EAR_INDICES.left): number {
+function singleEyeEAR(lms: Landmark[], idx: EyeIndices): number {
   const p1 = lms[idx.p1], p2 = lms[idx.p2], p3 = lms[idx.p3];
   const p4 = lms[idx.p4], p5 = lms[idx.p5], p6 = lms[idx.p6];
   if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6) {
