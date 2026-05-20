@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="./popup.css">
+</head>
+<body>
+  <header>
+    <h1>Eye Blink Detector</h1>
+    <button id="toggle">Start</button>
+  </header>
+  <section class="metric">
+    <div class="big" id="bpm">—</div>
+    <div class="label">blinks / min (last 5 min)</div>
+    <div class="state" id="state">OFF</div>
+  </section>
+  <section class="chart">
+    <canvas id="recent" width="280" height="80"></canvas>
+  </section>
+  <footer>
+    <a href="../dashboard/dashboard.html" target="_blank">Open Dashboard</a>
+    <button id="calibrate">Calibrate</button>
+  </footer>
+  <script type="module" src="./popup.ts"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+body { font: 13px system-ui; width: 300px; margin: 0; padding: 12px; }
+header { display: flex; align-items: center; justify-content: space-between; }
+h1 { font-size: 14px; margin: 0; }
+button { padding: 6px 12px; cursor: pointer; }
+.metric { text-align: center; padding: 16px 0; }
+.big { font-size: 36px; font-weight: 600; }
+.label { color: #666; font-size: 11px; }
+.state { margin-top: 4px; font-size: 11px; color: #888; }
+.chart { margin: 8px 0; }
+footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+footer a { color: #2563eb; text-decoration: none; }
