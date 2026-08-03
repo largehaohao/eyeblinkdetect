@@ -68,3 +68,24 @@ describe('aggregator', () => {
     expect(b.status).toBe('ok');
   });
 });
+
+describe('aggregator reset', () => {
+  it('drops buffered events so a resumed minute is not polluted', () => {
+    const agg = createAggregator();
+    agg.onEvent({ type: 'blink', t: 1000 });
+    agg.onEvent({ type: 'blink', t: 2000 });
+    agg.reset();
+    const b = agg.flush(0, MIN);
+    expect(b.blinks).toBe(0);
+  });
+
+  it('clears a stale face-lost flag so the next minute counts as visible', () => {
+    const agg = createAggregator();
+    agg.onEvent({ type: 'face_lost', t: 10_000 });
+    agg.flush(0, MIN);          // ends absent
+    agg.reset();
+    const b = agg.flush(MIN, 2 * MIN);
+    expect(b.faceVisibleMs).toBe(MIN);
+    expect(b.status).toBe('ok');
+  });
+});

@@ -52,5 +52,16 @@ export function createAggregator() {
     };
   }
 
-  return { onEvent, flush };
+  /**
+   * Drops buffered events and assumes the face is present again. Used when
+   * resuming after an idle pause, where stale events and a stale presence flag
+   * would otherwise corrupt the first minute after resume.
+   */
+  function reset() {
+    blinkTimes.length = 0;
+    faceEvents.length = 0;
+    presentAtFlush = true;
+  }
+
+  return { onEvent, flush, reset };
 }

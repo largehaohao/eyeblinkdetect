@@ -24,6 +24,32 @@ function singleEyeEAR(lms: Landmark[], idx: EyeIndices): number {
   return (dist(p2, p6) + dist(p3, p5)) / (2 * horizontal);
 }
 
+/** Plausible range for a personalized open-eye EAR threshold. */
+export const OPEN_THRESH_BOUNDS = { min: 0.15, max: 0.45 } as const;
+
+export type CalibrationResult =
+  | { ok: true; closeThresh: number; openThresh: number }
+  | { ok: false; reason: string };
+
+/**
+ * Derives EAR thresholds from calibration samples. Rejects implausible results —
+ * e.g. the user sat with eyes closed or at an extreme angle — so a bad
+ * calibration cannot permanently disable blink detection.
+ */
+export function calibrateThresholds(samples: number[]): CalibrationResult {
+  const usable = samples.filter(s => Number.isFinite(s) && s > 0);
+  if (usable.length < 30) {
+    return { ok: false, reason: 'not enough usable samples' };
+  }
+  const sorted = [...usable].sort((a, b) => a - b);
+  const p75 = sorted[Math.floor(sorted.length * 0.75)]!;
+  const openThresh = p75 * 0.8;
+  if (openThresh < OPEN_THRESH_BOUNDS.min || openThresh > OPEN_THRESH_BOUNDS.max) {
+    return { ok: false, reason: `derived openThresh ${openThresh.toFixed(3)} out of plausible range` };
+  }
+  return { ok: true, openThresh, closeThresh: openThresh * 0.8 };
+}
+
 export function computeEAR(landmarks: Landmark[]): number {
   if (landmarks.length < 478) throw new Error('EAR: expected 478 landmarks');
   const left = singleEyeEAR(landmarks, EAR_INDICES.left);

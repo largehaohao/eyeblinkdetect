@@ -1,23 +1,23 @@
 {
   "name": "eyeblinkdetect",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "0.1.0",
+  "description": "Chrome extension that tracks blink rate via webcam and reminds you to rest your eyes.",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["chrome-extension", "blink-detection", "eye-strain", "mediapipe"],
+  "license": "MIT",
   "type": "module",
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.4.0",
+    "@crxjs/vite-plugin": "^2.7.1",
     "@types/chrome": "^0.1.42",
     "@types/node": "^25.9.1",
     "fake-indexeddb": "^6.2.5",

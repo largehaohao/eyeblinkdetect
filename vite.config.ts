@@ -9,7 +9,12 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: 'node_modules/@mediapipe/tasks-vision/wasm/*.{js,wasm}',
+          src: 'node_modules/@mediapipe/tasks-vision/wasm/vision_wasm_internal.{js,wasm}',
+          dest: 'mediapipe-wasm',
+          rename: { stripBase: true }
+        },
+        {
+          src: 'node_modules/@mediapipe/tasks-vision/wasm/vision_wasm_nosimd_internal.{js,wasm}',
           dest: 'mediapipe-wasm',
           rename: { stripBase: true }
         }
@@ -19,7 +24,7 @@ export default defineConfig({
   resolve: { alias: { '@': '/src' } },
   build: {
     target: 'esnext',
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       input: {
         dashboard: 'src/dashboard/dashboard.html',

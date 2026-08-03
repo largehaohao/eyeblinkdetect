@@ -16,19 +16,23 @@ export type SessionRow = {
 };
 
 export type BlinkRow = {
+  id?: number;        // autoIncrement key; absent on rows not yet written
   t: number;          // blink timestamp (ms since epoch)
   sessionId: string;
 };
 
 const DB_NAME = 'eye-blink-detect';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
+
+/** Raw blink events older than this are pruned; minute buckets are kept forever. */
+export const BLINK_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 export function openDB(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = idbOpen(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      async upgrade(db, oldVersion, _newVersion, tx) {
         if (!db.objectStoreNames.contains('minutes')) {
           db.createObjectStore('minutes', { keyPath: 'tsMinute' });
         }
@@ -38,8 +42,19 @@ export function openDB(): Promise<IDBPDatabase> {
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings');
         }
-        if (!db.objectStoreNames.contains('blinks')) {
-          db.createObjectStore('blinks', { keyPath: 't' });
+
+        // v2 keyed blinks by `t`, so two blinks in the same millisecond silently
+        // overwrote each other. v3 uses an autoIncrement key with a `t` index.
+        let carried: BlinkRow[] = [];
+        if (db.objectStoreNames.contains('blinks')) {
+          if (oldVersion >= 3) return;
+          carried = await tx.objectStore('blinks').getAll() as BlinkRow[];
+          db.deleteObjectStore('blinks');
+        }
+        const blinks = db.createObjectStore('blinks', { keyPath: 'id', autoIncrement: true });
+        blinks.createIndex('t', 't');
+        for (const row of carried) {
+          blinks.add({ t: row.t, sessionId: row.sessionId });
         }
       }
     });
@@ -89,14 +104,31 @@ export async function writeSetting<T>(key: string, value: T): Promise<void> {
 
 export async function writeBlink(row: BlinkRow): Promise<void> {
   const db = await openDB();
-  await db.put('blinks', row);
+  // add(), not put(): every blink is a distinct row even at identical timestamps.
+  await db.add('blinks', { t: row.t, sessionId: row.sessionId });
 }
 
 export async function getBlinks(fromMs: number, toMs: number): Promise<BlinkRow[]> {
   const db = await openDB();
   const range = IDBKeyRange.bound(fromMs, toMs, false, true);
-  const rows = await db.getAll('blinks', range);
+  const rows = await db.getAllFromIndex('blinks', 't', range) as BlinkRow[];
   return rows.sort((a, b) => a.t - b.t);
+}
+
+/** Deletes raw blink events older than `cutoffMs`. Returns how many were removed. */
+export async function pruneBlinks(cutoffMs: number): Promise<number> {
+  const db = await openDB();
+  const tx = db.transaction('blinks', 'readwrite');
+  const index = tx.store.index('t');
+  let cursor = await index.openCursor(IDBKeyRange.upperBound(cutoffMs, true));
+  let removed = 0;
+  while (cursor) {
+    await cursor.delete();
+    removed += 1;
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+  return removed;
 }
 
 export async function clearAll(): Promise<void> {

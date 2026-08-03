@@ -1,12 +1,14 @@
 import Chart from 'chart.js/auto';
-import type { UIQuery } from '@/lib/messages';
+import type { UIQuery, UIEvent, ReminderDiagnostic } from '@/lib/messages';
 import type { MinuteRow, BlinkRow } from '@/lib/db';
 import type { Settings } from '@/lib/settings';
 import { nextRawBlinkSoundState, type RawBlinkSoundState } from '@/lib/blink-sound';
-import { BPM_RANGES, bpmTickLimit, formatBpmTick, type BpmRangeKey } from '@/lib/chart-range';
+import { BPM_RANGES, bpmTickLimit, formatBpmTick, downsample, type BpmRangeKey } from '@/lib/chart-range';
 
-function sendUI<T>(q: UIQuery): Promise<T> {
-  return chrome.runtime.sendMessage({ from: 'ui', payload: q }) as Promise<T>;
+async function sendUI<T>(q: UIQuery): Promise<T> {
+  const response = await chrome.runtime.sendMessage({ from: 'ui', payload: q }) as T & { __error?: string };
+  if (response && typeof response === 'object' && response.__error) throw new Error(response.__error);
+  return response;
 }
 
 const BLINK_RANGES: Record<string, number | 'inherit'> = {
@@ -104,10 +106,19 @@ document.querySelectorAll<HTMLButtonElement>('#blink-range-nav button').forEach(
   });
 });
 
+/** Downsampled buckets span more than one minute, so this axis cannot be fixed at 1. */
+function visibleAxisMax(visibleMinutes: number[]): number {
+  const peak = visibleMinutes.reduce((m, v) => Math.max(m, v), 0);
+  return peak > 1 ? Math.ceil(peak) : 1;
+}
+
 function render(rows: MinuteRow[]): void {
-  const labels = rows.map(r => new Date(r.tsMinute).toLocaleString());
-  const bpm = rows.map(r => r.status === 'ok' ? r.blinks / (r.faceVisibleMs / 60_000) : null);
-  const visibleMinutes = rows.map(r => r.faceVisibleMs / 60_000);
+  // Plot a downsampled series, but compute the summary stats from every raw row
+  // so the totals stay exact.
+  const plotted = downsample(rows);
+  const labels = plotted.map(r => new Date(r.tsMinute).toLocaleString());
+  const bpm = plotted.map(r => r.status === 'ok' && r.faceVisibleMs > 0 ? r.blinks / (r.faceVisibleMs / 60_000) : null);
+  const visibleMinutes = plotted.map(r => r.faceVisibleMs / 60_000);
 
   if (!chart) {
     chart = new Chart(document.getElementById('main-chart') as HTMLCanvasElement, {
@@ -123,7 +134,7 @@ function render(rows: MinuteRow[]): void {
         interaction: { mode: 'index', intersect: false },
         scales: {
           y: { beginAtZero: true, grid: { color: 'rgba(148, 163, 184, 0.16)' }, ticks: { color: '#9ca3af' } },
-          visible: { position: 'right', min: 0, max: 1, grid: { drawOnChartArea: false }, ticks: { color: '#a78bfa', callback: v => `${Number(v).toFixed(1)}m` } },
+          visible: { position: 'right', min: 0, max: visibleAxisMax(visibleMinutes), grid: { drawOnChartArea: false }, ticks: { color: '#a78bfa', callback: v => `${Number(v).toFixed(1)}m` } },
           x: { grid: { color: 'rgba(148, 163, 184, 0.08)' }, ticks: { color: '#9ca3af', maxTicksLimit: bpmTickLimit(currentBpmRange), callback: v => formatBpmTick(v, currentBpmRange) } }
         },
         plugins: { legend: { labels: { color: '#d1d5db', boxWidth: 10, usePointStyle: true } } }
@@ -133,6 +144,7 @@ function render(rows: MinuteRow[]): void {
     chart.data.labels = labels;
     chart.data.datasets[0]!.data = bpm as any;
     chart.data.datasets[1]!.data = visibleMinutes as any;
+    (chart.options.scales!.visible as any).max = visibleAxisMax(visibleMinutes);
     const xTicks = (chart.options.scales!.x as any).ticks;
     xTicks.maxTicksLimit = bpmTickLimit(currentBpmRange);
     xTicks.callback = (v: string | number) => formatBpmTick(v, currentBpmRange);
@@ -159,38 +171,114 @@ document.querySelectorAll<HTMLButtonElement>('#bpm-range-nav button[data-range]'
 
 async function loadSettingsForm(): Promise<void> {
   const s = await sendUI<Settings>({ kind: 'settings_get' });
+  const overlayAllowed = await chrome.permissions.contains({ origins: ['<all_urls>'] });
   const f = document.getElementById('settings-form') as HTMLFormElement;
   (f.lowBpm as HTMLInputElement).value = String(s.threshold.lowBpm);
   (f.windowMinutes as HTMLInputElement).value = String(s.threshold.windowMinutes);
   (f.sustainMinutes as HTMLInputElement).value = String(s.threshold.sustainMinutes);
   (f.cooldownMinutes as HTMLInputElement).value = String(s.cooldownMinutes);
   (f.systemNotification as HTMLInputElement).checked = s.reminderModes.systemNotification;
-  (f.fullscreenOverlay as HTMLInputElement).checked = s.reminderModes.fullscreenOverlay;
+  (f.fullscreenOverlay as HTMLInputElement).checked = s.reminderModes.fullscreenOverlay && overlayAllowed;
   blinkSoundMuted = s.audio.rawBlinkSoundMuted;
   updateSoundToggle();
 }
 
+const settingsStatus = document.getElementById('settings-status')!;
+let settingsStatusTimer: number | null = null;
+
+function showSettingsStatus(text: string, tone: 'ok' | 'err'): void {
+  settingsStatus.textContent = text;
+  settingsStatus.dataset.tone = tone;
+  if (settingsStatusTimer !== null) window.clearTimeout(settingsStatusTimer);
+  settingsStatusTimer = window.setTimeout(() => {
+    settingsStatus.textContent = '';
+    delete settingsStatus.dataset.tone;
+  }, 2500);
+}
+
+function describeReminderDiagnostic(d: ReminderDiagnostic): string {
+  if (d.state === 'OFF') return 'Detection is off.';
+  if (d.state === 'PAUSED') return 'Detection is paused while the computer is idle or locked.';
+  if (d.state === 'ABSENT') return 'Face is not currently detected.';
+  if (!d.systemNotification && !d.fullscreenOverlay) return 'No reminder delivery mode is enabled.';
+  if (d.reason === 'ready') return `Low BPM confirmed (${d.averageBpm?.toFixed(1)} < ${d.lowBpm}); reminder should fire.`;
+  if (d.reason === 'insufficient_window' || d.reason === 'insufficient_sustain') {
+    return `Waiting for complete minutes: ${d.bucketCount}/${Math.max(d.windowMinutes, d.sustainMinutes)}.`;
+  }
+  if (d.reason === 'cooldown') return `Cooldown active for ${Math.ceil(d.cooldownRemainingMs / 60_000)} more minute(s).`;
+  if (d.reason === 'no_valid_minutes' || d.reason === 'no_valid_sustain') {
+    return `No valid minute yet (${d.validBucketCount}/${d.bucketCount}); keep your face visible for at least 30 seconds per minute.`;
+  }
+  if (d.reason === 'window_average_not_low') {
+    return `Average BPM is ${d.averageBpm?.toFixed(1)}, not below the ${d.lowBpm} threshold.`;
+  }
+  return `A recent minute was not below the ${d.lowBpm} BPM threshold.`;
+}
+
+async function loadReminderDiagnostic(): Promise<void> {
+  const el = document.getElementById('reminder-diagnostic-status')!;
+  try {
+    const diagnostic = await sendUI<ReminderDiagnostic>({ kind: 'reminder_diagnostic' });
+    el.textContent = describeReminderDiagnostic(diagnostic);
+    el.dataset.tone = diagnostic.reason === 'ready' ? 'ok' : 'err';
+    document.getElementById('reminders')!.textContent = diagnostic.lastReminderAt > 0
+      ? new Date(diagnostic.lastReminderAt).toLocaleTimeString()
+      : 'None';
+  } catch (err) {
+    el.textContent = `Diagnostic failed: ${(err as Error)?.message ?? err}`;
+    el.dataset.tone = 'err';
+  }
+}
+
+document.getElementById('test-notification')!.addEventListener('click', async () => {
+  const button = document.getElementById('test-notification') as HTMLButtonElement;
+  button.disabled = true;
+  try {
+    await sendUI({ kind: 'test_notification' });
+    showSettingsStatus('Chrome notification requested', 'ok');
+  } catch (err) {
+    showSettingsStatus(`Notification failed: ${(err as Error)?.message ?? err}`, 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.getElementById('settings-form')!.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target as HTMLFormElement;
-  await sendUI({
-    kind: 'settings_set',
-    patch: {
-      threshold: {
-        lowBpm: Number((f.lowBpm as HTMLInputElement).value),
-        windowMinutes: Number((f.windowMinutes as HTMLInputElement).value),
-        sustainMinutes: Number((f.sustainMinutes as HTMLInputElement).value)
-      },
-      cooldownMinutes: Number((f.cooldownMinutes as HTMLInputElement).value),
-      reminderModes: {
-        systemNotification: (f.systemNotification as HTMLInputElement).checked,
-        fullscreenOverlay: (f.fullscreenOverlay as HTMLInputElement).checked
-      },
-      audio: {
-        rawBlinkSoundMuted: blinkSoundMuted
-      }
+  try {
+    const wantsOverlay = (f.fullscreenOverlay as HTMLInputElement).checked;
+    let overlayAllowed = true;
+    if (wantsOverlay) {
+      overlayAllowed = await chrome.permissions.request({ origins: ['<all_urls>'] });
+    } else {
+      await chrome.permissions.remove({ origins: ['<all_urls>'] });
     }
-  });
+    if (!overlayAllowed) (f.fullscreenOverlay as HTMLInputElement).checked = false;
+    const saved = await sendUI<Settings>({
+      kind: 'settings_set',
+      patch: {
+        threshold: {
+          lowBpm: Number((f.lowBpm as HTMLInputElement).value),
+          windowMinutes: Number((f.windowMinutes as HTMLInputElement).value),
+          sustainMinutes: Number((f.sustainMinutes as HTMLInputElement).value)
+        },
+        cooldownMinutes: Number((f.cooldownMinutes as HTMLInputElement).value),
+        reminderModes: {
+          systemNotification: (f.systemNotification as HTMLInputElement).checked,
+          fullscreenOverlay: wantsOverlay && overlayAllowed
+        },
+        audio: {
+          rawBlinkSoundMuted: blinkSoundMuted
+        }
+      }
+    });
+    const suffix = wantsOverlay && !overlayAllowed ? '; overlay permission denied' : '';
+    showSettingsStatus(`Saved (low ${saved.threshold.lowBpm} BPM, window ${saved.threshold.windowMinutes}m, sustain ${saved.threshold.sustainMinutes}m)${suffix}`, overlayAllowed ? 'ok' : 'err');
+    await loadReminderDiagnostic();
+  } catch (err) {
+    showSettingsStatus(`Save failed: ${(err as Error)?.message ?? err}`, 'err');
+  }
 });
 
 document.getElementById('export-csv')!.addEventListener('click', async () => {
@@ -266,6 +354,42 @@ soundToggle.addEventListener('click', async () => {
 (document.querySelector('#blink-range-nav button[data-blink-range="5m"]') as HTMLElement).classList.add('active');
 updateSoundToggle();
 loadSettingsForm();
+loadReminderDiagnostic();
 
-// Auto-refresh the blink chart every 5s so new blinks appear without manual reload.
-setInterval(loadBlinks, 5_000);
+// Refresh the blink chart while the tab is visible. Polling is still needed for
+// raw blinks (the worker only broadcasts on whole-minute commits), but a hidden
+// tab has nothing to redraw, so the timer is torn down until it comes back.
+const BLINK_POLL_MS = 5_000;
+let pollHandle: number | null = null;
+
+function startPolling(): void {
+  if (pollHandle !== null) return;
+  pollHandle = window.setInterval(loadBlinks, BLINK_POLL_MS);
+}
+
+function stopPolling(): void {
+  if (pollHandle === null) return;
+  window.clearInterval(pollHandle);
+  pollHandle = null;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    void loadBlinks();
+    startPolling();
+  }
+});
+if (!document.hidden) startPolling();
+
+// The worker commits a minute bucket on every tick; redraw the BPM chart then
+// rather than polling the (potentially very large) minute range on a timer.
+chrome.runtime.onMessage.addListener((msg: { from: string; payload: UIEvent }) => {
+  if (msg.from !== 'sw_ui') return;
+  if (document.hidden) return;
+  if (msg.payload.kind === 'minute_committed') {
+    void loadRange(currentBpmRange);
+    void loadReminderDiagnostic();
+  }
+});

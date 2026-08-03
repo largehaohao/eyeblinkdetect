@@ -30,7 +30,16 @@ a { color: #5eead4; }
 .field input[type="number"]:focus { outline: 2px solid rgba(20, 184, 166, 0.36); border-color: #14b8a6; }
 .check-row { display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 9px 10px; border: 1px solid #374151; border-radius: 8px; background: rgba(31, 41, 55, 0.72); color: #e5e7eb; font-size: 13px; }
 .check-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: #14b8a6; }
-.primary-action { grid-column: 1 / -1; justify-self: end; min-width: 132px; padding: 9px 14px; border-color: #14b8a6; background: #14b8a6; color: #06231f; font-weight: 800; }
+.reminder-diagnostic { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px; border: 1px solid #374151; border-radius: 8px; background: rgba(17, 24, 39, 0.68); }
+.reminder-diagnostic strong { color: #e5e7eb; font-size: 12px; }
+.reminder-diagnostic p { margin: 4px 0 0; color: #9ca3af; font-size: 12px; line-height: 1.4; }
+.reminder-diagnostic p[data-tone="ok"] { color: #5eead4; }
+.reminder-diagnostic p[data-tone="err"] { color: #fca5a5; }
+.save-row { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.primary-action { min-width: 132px; padding: 9px 14px; border-color: #14b8a6; background: #14b8a6; color: #06231f; font-weight: 800; }
+.settings-status { font-size: 12px; color: #9ca3af; font-weight: 600; min-height: 16px; }
+.settings-status[data-tone="ok"] { color: #5eead4; }
+.settings-status[data-tone="err"] { color: #f87171; }
 .export-card { display: flex; flex-direction: column; }
 .export-actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: auto; }
 .export-button { min-height: 46px; border-color: #4b5563; background: linear-gradient(135deg, rgba(20, 184, 166, 0.22), rgba(167, 139, 250, 0.16)); color: #f9fafb; font-size: 15px; font-weight: 800; }
@@ -39,5 +48,7 @@ a { color: #5eead4; }
 @media (max-width: 760px) {
   header, .row { align-items: flex-start; flex-direction: column; }
   .settings-form, .grid-3, .tools-grid { grid-template-columns: 1fr; }
-  .primary-action { justify-self: stretch; }
+  .save-row { flex-direction: column; align-items: stretch; }
+  .reminder-diagnostic { align-items: stretch; flex-direction: column; }
+  .primary-action { width: 100%; }
 }

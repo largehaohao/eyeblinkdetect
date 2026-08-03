@@ -17,7 +17,7 @@
         <nav class="sub-nav" id="bpm-range-nav">
           <button data-range="6h">6h</button>
           <button data-range="12h">12h</button>
-          <button data-range="day">Today</button>
+          <button data-range="day">24h</button>
           <button data-range="week">7d</button>
           <button data-range="month">30d</button>
           <button data-range="all">All</button>
@@ -63,7 +63,17 @@
           <label class="field">Cooldown minutes <input type="number" name="cooldownMinutes" min="1" max="60"></label>
           <label class="check-row"><input type="checkbox" name="systemNotification"> System notifications</label>
           <label class="check-row"><input type="checkbox" name="fullscreenOverlay"> Fullscreen overlay</label>
-          <button class="primary-action" type="submit">Save settings</button>
+          <div class="reminder-diagnostic">
+            <div>
+              <strong>Reminder check</strong>
+              <p id="reminder-diagnostic-status">Loading…</p>
+            </div>
+            <button id="test-notification" type="button">Test Chrome notification</button>
+          </div>
+          <div class="save-row">
+            <button class="primary-action" type="submit">Save settings</button>
+            <span id="settings-status" class="settings-status" aria-live="polite"></span>
+          </div>
         </form>
       </section>
 

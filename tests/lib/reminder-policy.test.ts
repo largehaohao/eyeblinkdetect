@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldRemind } from '../../src/lib/reminder-policy';
+import { evaluateReminder, shouldRemind } from '../../src/lib/reminder-policy';
 import type { MinuteBucket } from '../../src/lib/aggregator';
 
 const CFG = {
@@ -63,5 +63,15 @@ describe('shouldRemind', () => {
       bucket(0, 10_000)
     ];
     expect(shouldRemind(buckets, 0, CFG, 100_000)).toBe(false);
+  });
+
+  it('explains why a reminder is blocked', () => {
+    const decision = evaluateReminder([bucket(5), bucket(5)], 0, CFG, 100_000);
+    expect(decision).toMatchObject({
+      shouldRemind: false,
+      reason: 'insufficient_window',
+      bucketCount: 2,
+      validBucketCount: 2
+    });
   });
 });

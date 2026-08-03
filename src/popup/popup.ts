@@ -2,8 +2,10 @@ import Chart from 'chart.js/auto';
 import type { UIQuery, UIEvent } from '@/lib/messages';
 import type { MinuteRow } from '@/lib/db';
 
-function sendUI<T>(q: UIQuery): Promise<T> {
-  return chrome.runtime.sendMessage({ from: 'ui', payload: q }) as Promise<T>;
+async function sendUI<T>(q: UIQuery): Promise<T> {
+  const response = await chrome.runtime.sendMessage({ from: 'ui', payload: q }) as T & { __error?: string };
+  if (response && typeof response === 'object' && response.__error) throw new Error(response.__error);
+  return response;
 }
 
 const toggle = document.getElementById('toggle') as HTMLButtonElement;
@@ -20,6 +22,7 @@ async function refresh(): Promise<void> {
   currentState = status.state;
   stateEl.textContent = status.state;
   toggle.textContent = status.state === 'OFF' ? 'Start' : 'Stop';
+  calibrateBtn.disabled = status.state !== 'RUNNING' && status.state !== 'ABSENT';
 
   const since = Date.now() - 60 * 60_000;
   const rows = await sendUI<MinuteRow[]>({ kind: 'recent_minutes', sinceMs: since });
