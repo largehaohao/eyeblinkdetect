@@ -3,3 +3,5 @@ dist/
 .DS_Store
 *.log
 .superpowers/
+test-results/
+playwright-report/

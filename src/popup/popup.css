@@ -1,11 +1,19 @@
-body { font: 13px system-ui; width: 300px; margin: 0; padding: 12px; background: #111827; color: #f9fafb; }
-header { display: flex; align-items: center; justify-content: space-between; }
-h1 { font-size: 14px; margin: 0; }
-button { padding: 6px 12px; cursor: pointer; border: 1px solid #14b8a6; border-radius: 6px; background: rgba(20, 184, 166, 0.16); color: #99f6e4; font-weight: 700; }
-.metric { text-align: center; padding: 16px 0; }
-.big { font-size: 38px; font-weight: 800; color: #99f6e4; }
-.label { color: #9ca3af; font-size: 11px; }
-.state { margin-top: 6px; font-size: 11px; color: #d1d5db; }
-.chart { margin: 8px 0; border: 1px solid #374151; border-radius: 8px; background: #1f2937; padding: 8px; }
-footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
-footer a { color: #5eead4; text-decoration: none; }
+@import '../lib/theme.css';
+body { width: 360px; max-width: 100%; padding: 20px; }
+.popup-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+h1 { font-size: 19px; letter-spacing: -.5px; line-height: 1.3; }
+.metric { padding: 12px 0 18px; }
+.big { font-size: 60px; line-height: 1.12; letter-spacing: -3px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.metric-unit { font-size: 14px; margin-top: 4px; }
+.metric .hint { margin-top: 4px; }
+.chart-heading { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
+.chart { position: relative; height: 76px; margin-top: 8px; }
+.chart-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-muted); font-size: 12px; }
+.status-detail { min-height: 52px; color: var(--color-muted); font-size: 12px; line-height: 1.65; padding: 12px 0; }
+#toggle, #retry { width: 100%; min-height: 44px; }
+.notice { margin-bottom: 12px; }
+.secondary-actions { display: flex; gap: 8px; margin-top: 10px; }
+.secondary-actions > * { flex: 1; padding-inline: 10px; font-size: 12px; }
+footer { display: flex; gap: 7px; align-items: center; border-top: 1px solid var(--color-line); margin-top: 16px; padding-top: 14px; font-size: 11px; color: var(--color-muted); }
+footer .icon { width: 14px; height: 14px; }
+@media (max-width: 340px) { body { padding: 18px; } }

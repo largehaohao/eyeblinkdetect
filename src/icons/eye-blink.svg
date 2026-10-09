@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Eye Blink</title>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="#233e33"/>
+  <path d="M20 64C31 46 46 35 64 35s33 11 44 29C97 82 82 93 64 93S31 82 20 64Z" fill="#f9fcf5"/>
+  <circle cx="64" cy="64" r="23" fill="#b8d49e"/>
+  <circle cx="64" cy="64" r="12" fill="#233e33"/>
+  <circle cx="69" cy="59" r="3.5" fill="#f9fcf5"/>
+</svg>

@@ -1,4 +1,7 @@
 export const BPM_RANGES = {
+  '10m': 10 * 60_000,
+  '30m': 30 * 60_000,
+  '1h': 60 * 60_000,
   '6h': 6 * 60 * 60_000,
   '12h': 12 * 60 * 60_000,
   day: 24 * 60 * 60_000,
@@ -18,7 +21,8 @@ export function bpmTickLimit(range: BpmRangeKey): number {
 
 export function formatBpmTick(value: string | number, range: BpmRangeKey): string {
   const d = new Date(Number(value));
-  if (range === '6h' || range === '12h' || range === 'day') {
+  const duration = BPM_RANGES[range];
+  if (duration !== 'all' && duration <= BPM_RANGES.day) {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });

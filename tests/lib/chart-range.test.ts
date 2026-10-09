@@ -3,7 +3,10 @@ import { BPM_RANGES, bpmTickLimit, formatBpmTick, downsample } from '../../src/l
 
 describe('BPM chart range helpers', () => {
   it('provides short and long range choices for the main BPM chart', () => {
-    expect(Object.keys(BPM_RANGES)).toEqual(['6h', '12h', 'day', 'week', 'month', 'all']);
+    expect(Object.keys(BPM_RANGES)).toEqual(['10m', '30m', '1h', '6h', '12h', 'day', 'week', 'month', 'all']);
+    expect(BPM_RANGES['10m']).toBe(10 * 60_000);
+    expect(BPM_RANGES['30m']).toBe(30 * 60_000);
+    expect(BPM_RANGES['1h']).toBe(60 * 60_000);
     expect(BPM_RANGES['6h']).toBe(6 * 60 * 60_000);
     expect(BPM_RANGES.all).toBe('all');
   });
@@ -19,6 +22,9 @@ describe('BPM chart range helpers', () => {
   it('formats short ranges as time and long ranges as dates', () => {
     const t = Date.UTC(2026, 4, 20, 9, 5);
 
+    for (const range of ['10m', '30m', '1h'] as const) {
+      expect(formatBpmTick(t, range)).toBe(formatBpmTick(t, '6h'));
+    }
     expect(formatBpmTick(t, '6h')).toMatch(/09:05|5:05/);
     expect(formatBpmTick(t, 'week')).toContain('May');
     expect(formatBpmTick(t, 'month')).toContain('May');

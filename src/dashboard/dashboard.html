@@ -1,95 +1,98 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Eye Blink Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eye Blink — Your activity</title>
+  <link rel="icon" type="image/png" href="../icons/icon-32.png">
   <link rel="stylesheet" href="./dashboard.css">
 </head>
 <body>
-  <header>
-    <h1>Eye Blink Dashboard</h1>
-  </header>
+  <a class="skip-link" href="#main">Skip to activity</a>
+  <aside class="sidebar" aria-label="App navigation">
+    <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true"><img src="../icons/eye-blink.svg" width="36" height="36" alt=""></span><span>Eye Blink<small>Mindful screen time</small></span></a>
+    <nav class="app-nav" aria-label="Sections">
+      <a href="#overview" aria-current="location"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <a href="#activity"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Blink activity</a>
+      <a href="#preferences"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg>Preferences</a>
+    </nav>
+    <div class="sidebar-note"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></svg><strong>Private by design</strong><p>Processed on your device.<br>No video saved or uploaded.</p></div>
+    <div class="sidebar-footer">Eye Blink Detector <span>v0.1</span></div>
+  </aside>
 
-  <main>
-    <section class="card">
-      <div class="row">
-        <h2>Per-minute BPM</h2>
-        <nav class="sub-nav" id="bpm-range-nav">
-          <button data-range="6h">6h</button>
-          <button data-range="12h">12h</button>
-          <button data-range="day">24h</button>
-          <button data-range="week">7d</button>
-          <button data-range="month">30d</button>
-          <button data-range="all">All</button>
-        </nav>
-      </div>
-      <canvas id="main-chart" width="900" height="260"></canvas>
-    </section>
+  <div class="workspace">
+    <header class="topbar"><span>Personal overview</span><span id="today"></span></header>
+    <main id="main">
+      <section id="overview" class="page-heading">
+        <div><h1>Your eyes, in focus.</h1><p>A clearer view of your blink rhythm and screen habits.</p></div>
+        <div class="status-pill" id="session-status" role="status">Connecting…</div>
+      </section>
+      <div id="page-error" class="notice" data-tone="error" role="alert" hidden><span id="page-error-text"></span><button id="retry" type="button">Try again</button></div>
+      <section class="summary" aria-label="Selected range summary">
+        <div class="summary-main"><span class="stat-label">Average blink rate</span><div><span class="stat-value" id="avg">—</span><span class="stat-unit">blinks / min</span></div><span class="hint" id="summary-range">Over the last 24 hours</span></div>
+        <div><span class="stat-label">Tracked time</span><div class="stat-value" id="tracked">—</div><span class="hint">Time with your face visible</span></div>
+        <div><span class="stat-label">Blinks recorded</span><div class="stat-value" id="total-blinks">—</div><span class="hint">Within the selected range</span></div>
+      </section>
 
-    <section class="card">
-      <div class="row">
-        <h2>Raw blink events</h2>
-        <div class="row-actions">
-          <button class="sound-toggle" id="sound-toggle" type="button">Sound on</button>
-          <nav class="sub-nav" id="blink-range-nav">
-            <button data-blink-range="1m">1 min</button>
-            <button data-blink-range="5m">5 min</button>
-            <button data-blink-range="15m">15 min</button>
-            <button data-blink-range="1h">1 hour</button>
-            <button data-blink-range="all">All in view</button>
+      <div class="overview-grid">
+        <section class="panel trend-panel" aria-labelledby="trend-title">
+          <div class="section-heading"><div><h2 id="trend-title">Your blink rhythm</h2><p>Small moments, across your day.</p></div><span class="legend"><i></i>Blinks / min</span></div>
+          <nav class="range-nav" id="bpm-range-nav" aria-label="Trend time range">
+            <button data-range="10m" aria-pressed="false">10min</button><button data-range="30m" aria-pressed="false">30min</button><button data-range="1h" aria-pressed="false">1h</button>
+            <button data-range="6h" aria-pressed="false">6h</button><button data-range="12h" aria-pressed="false">12h</button><button data-range="day" class="active" aria-pressed="true">24h</button><button data-range="week" aria-pressed="false">7d</button><button data-range="month" aria-pressed="false">30d</button><button data-range="all" aria-pressed="false">All time</button>
           </nav>
-        </div>
+          <div class="main-chart-wrap"><canvas id="main-chart" role="img" aria-label="Blink rate by time for the selected range"></canvas><div id="trend-empty" class="empty-state" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16h4l3-8 4 12 3-7h4"/></svg><strong>Your rhythm starts here</strong><p>Start tracking to see your first completed minute.<br>Try a wider range to explore earlier sessions.</p></div></div>
+          <div class="chart-footer"><span>Gaps mean no valid reading.</span><span id="chart-updated" role="status">Loading activity…</span></div>
+        </section>
+        <aside class="session-panel" aria-labelledby="session-title">
+          <div class="session-illustration" aria-hidden="true"><svg viewBox="0 0 160 100"><path class="eye-line" d="M20 53S41 24 80 24s60 29 60 29-21 29-60 29-60-29-60-29Z"/><circle class="eye-iris" cx="80" cy="53" r="17"/><circle class="eye-pupil" cx="80" cy="53" r="6"/><path class="eye-line" d="m37 20-5-7m48 0V4m43 16 5-7"/></svg></div>
+          <h2 id="session-title">Make room for a blink.</h2>
+          <p id="session-detail" aria-live="polite">Checking your session…</p>
+          <button class="primary-action" id="toggle" disabled>Connecting…</button>
+          <button id="calibrate" disabled>Calibrate detection</button>
+          <p class="hint" id="calibration-feedback" role="status"></p>
+          <div class="session-foot"><span>Last reminder</span><strong id="reminders">—</strong></div>
+        </aside>
       </div>
-      <canvas id="blink-chart" width="900" height="140"></canvas>
-      <div class="hint" id="blink-count">—</div>
-    </section>
 
-    <section class="card grid-3">
-      <div><div class="stat-label">Avg BPM</div><div class="stat-value" id="avg">—</div></div>
-      <div><div class="stat-label">Tracked time</div><div class="stat-value" id="tracked">—</div></div>
-      <div><div class="stat-label">Reminders</div><div class="stat-value" id="reminders">—</div></div>
-    </section>
-
-    <div class="tools-grid">
-      <section class="card settings-card">
-        <div class="section-heading">
-          <h2>Settings</h2>
-          <p>Tune reminder thresholds and delivery modes.</p>
-        </div>
-        <form id="settings-form" class="settings-form">
-          <label class="field">Low-BPM threshold <input type="number" name="lowBpm" min="1" max="40"></label>
-          <label class="field">Window minutes <input type="number" name="windowMinutes" min="1" max="30"></label>
-          <label class="field">Sustain minutes <input type="number" name="sustainMinutes" min="1" max="30"></label>
-          <label class="field">Cooldown minutes <input type="number" name="cooldownMinutes" min="1" max="60"></label>
-          <label class="check-row"><input type="checkbox" name="systemNotification"> System notifications</label>
-          <label class="check-row"><input type="checkbox" name="fullscreenOverlay"> Fullscreen overlay</label>
-          <div class="reminder-diagnostic">
-            <div>
-              <strong>Reminder check</strong>
-              <p id="reminder-diagnostic-status">Loading…</p>
-            </div>
-            <button id="test-notification" type="button">Test Chrome notification</button>
-          </div>
-          <div class="save-row">
-            <button class="primary-action" type="submit">Save settings</button>
-            <span id="settings-status" class="settings-status" aria-live="polite"></span>
-          </div>
-        </form>
+      <section id="activity" class="panel" aria-labelledby="activity-title">
+        <div class="section-heading activity-heading"><div><h2 id="activity-title">A closer look</h2><p>Each dot is a detected blink. Raw events are kept for 7 days.</p></div><button id="sound-toggle" type="button" aria-pressed="false" disabled>Sound muted</button></div>
+        <nav class="range-nav compact" id="blink-range-nav" aria-label="Raw blink time range"><button data-blink-range="1m" aria-pressed="false">1 min</button><button data-blink-range="5m" class="active" aria-pressed="true">5 min</button><button data-blink-range="15m" aria-pressed="false">15 min</button><button data-blink-range="1h" aria-pressed="false">1 hour</button><button data-blink-range="all" aria-pressed="false">All in view</button></nav>
+        <div class="blink-chart-wrap"><canvas id="blink-chart" role="img" aria-label="Individual blinks over time"></canvas></div>
+        <div class="chart-footer"><span id="blink-count">Loading blinks…</span><span id="blink-error" role="status"></span></div>
       </section>
 
-      <section class="card export-card">
-        <div class="section-heading">
-          <h2>Export</h2>
-          <p>Download all stored minute buckets for analysis or backup.</p>
-        </div>
-        <div class="export-actions">
-          <button class="export-button" id="export-csv">CSV</button>
-          <button class="export-button" id="export-json">JSON</button>
-        </div>
-      </section>
-    </div>
-  </main>
-
+      <div class="tools-grid" id="preferences">
+        <section class="panel settings-card" aria-labelledby="settings-title">
+          <div class="section-heading"><div><h2 id="settings-title">Reminders, at your pace.</h2><p>Choose when you’d like a gentle nudge to rest your eyes.</p></div></div>
+          <form id="settings-form">
+            <fieldset id="settings-fields" disabled>
+              <div class="settings-grid">
+                <label class="field">Low blink rate <span class="input-wrap"><input type="number" name="lowBpm" min="1" max="60" step="1" required><span>BPM</span></span><small>Remind below this average</small></label>
+                <label class="field">Averaging window <span class="input-wrap"><input type="number" name="windowMinutes" min="1" max="120" step="1" required><span>min</span></span><small>Recent minutes to consider</small></label>
+                <label class="field">Sustained low rate <span class="input-wrap"><input type="number" name="sustainMinutes" min="1" max="120" step="1" required><span>min</span></span><small>Wait before sending a reminder</small></label>
+                <label class="field">Time between reminders <span class="input-wrap"><input type="number" name="cooldownMinutes" min="1" max="240" step="1" required><span>min</span></span><small>Minimum time to wait</small></label>
+              </div>
+              <div class="delivery-options">
+                <label class="check-row"><span><strong>Desktop notification</strong><small>A quiet nudge from Chrome</small></span><input type="checkbox" name="systemNotification" role="switch"></label>
+                <label class="check-row"><span><strong>On-page rest reminder</strong><small>A 20-second overlay. Requires website access.</small></span><input type="checkbox" name="fullscreenOverlay" role="switch"></label>
+              </div>
+              <div class="save-row"><span id="settings-status" role="status"></span><button class="primary-action" id="save-settings" type="submit">Save preferences</button></div>
+            </fieldset>
+          </form>
+          <details class="diagnostic"><summary>Reminder status &amp; testing</summary><p id="reminder-diagnostic-status">Loading…</p><button id="test-notification" type="button">Test notification</button></details>
+        </section>
+        <aside class="export-card" aria-labelledby="export-title">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5"/></svg>
+          <h2 id="export-title">Your data, yours to keep.</h2><p>Take your full minute-by-minute history with you. Export for a closer look or a personal backup.</p>
+          <div class="export-actions"><button id="export-csv">Download CSV <span aria-hidden="true">↓</span></button><button id="export-json">Download JSON <span aria-hidden="true">↓</span></button></div>
+          <p class="hint" id="export-status" role="status">All stored history · No video included</p>
+          <div class="export-note"><strong>A moment away helps.</strong><p>Let your gaze wander beyond the screen. Your next task can wait a blink.</p></div>
+        </aside>
+      </div>
+      <footer class="page-footer"><span>Made for more mindful screen time.</span><span>A habit-building tool, not a medical assessment.</span></footer>
+    </main>
+  </div>
   <script type="module" src="./dashboard.ts"></script>
 </body>
 </html>

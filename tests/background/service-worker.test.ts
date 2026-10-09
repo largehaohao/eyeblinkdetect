@@ -139,6 +139,54 @@ describe('service worker idle handling', () => {
     settings.saveSettings.mockResolvedValue(undefined);
   });
 
+  it('keeps calibration progress and completion available after reopening the UI', async () => {
+    const env = installChromeMock();
+    await import('../../src/background/service-worker');
+    await sendUI(env.onMessage, { kind: 'toggle', on: true });
+    expect(await sendUI(env.onMessage, { kind: 'status' })).toMatchObject({ calibration: 'running' });
+    await new Promise<void>(resolve => env.onMessage({ from: 'offscreen', payload: {
+      kind: 'calibration_done', closeThresh: 0.22, openThresh: 0.28
+    } }, {}, () => resolve()));
+    expect(await sendUI(env.onMessage, { kind: 'status' })).toMatchObject({ calibration: 'done' });
+    expect(env.sessionStore.get('sessionState')).toMatchObject({ calibration: 'done' });
+    expect(env.chromeMock.runtime.sendMessage).toHaveBeenCalledWith({ from: 'sw_ui', payload: { kind: 'detector_feedback' } });
+  });
+
+  it('reports that permission setup was opened instead of pretending tracking started', async () => {
+    const env = installChromeMock();
+    vi.stubGlobal('navigator', { permissions: { query: async () => ({ state: 'prompt' }) } });
+    await import('../../src/background/service-worker');
+    expect(await sendUI(env.onMessage, { kind: 'toggle', on: true })).toMatchObject({ state: 'OFF', permissionRequired: true });
+    expect(env.chromeMock.tabs.create).toHaveBeenCalledTimes(1);
+    expect(env.chromeMock.offscreen.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('serializes independent settings saves so read/merge/write operations cannot overlap', async () => {
+    const env = installChromeMock();
+    await import('../../src/background/service-worker');
+    let resolveFirst!: () => void;
+    settings.saveSettings.mockImplementationOnce(() => new Promise<void>(resolve => { resolveFirst = resolve; }));
+    const first = sendUI(env.onMessage, { kind: 'settings_set', patch: { cooldownMinutes: 12 } });
+    const second = sendUI(env.onMessage, { kind: 'settings_set', patch: { audio: { rawBlinkSoundMuted: true } } });
+    await deferred();
+    expect(settings.saveSettings).toHaveBeenCalledTimes(1);
+    resolveFirst();
+    await Promise.all([first, second]);
+    expect(settings.saveSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it('restarts interrupted calibration after returning from idle', async () => {
+    const env = installChromeMock();
+    await import('../../src/background/service-worker');
+    await sendUI(env.onMessage, { kind: 'toggle', on: true });
+    await env.onIdle('locked');
+    expect(await sendUI(env.onMessage, { kind: 'status' })).toMatchObject({ state: 'PAUSED', calibration: 'idle' });
+    env.chromeMock.runtime.sendMessage.mockClear();
+    await env.onIdle('active');
+    expect(env.chromeMock.runtime.sendMessage).toHaveBeenCalledWith({ from: 'sw', payload: { kind: 'recalibrate' } });
+    expect(await sendUI(env.onMessage, { kind: 'status' })).toMatchObject({ state: 'RUNNING', calibration: 'running' });
+  });
+
   it('does not write minute buckets while paused by idle lock', async () => {
     const env = installChromeMock();
     await import('../../src/background/service-worker');

@@ -4,6 +4,13 @@ import { createAggregator } from '../../src/lib/aggregator';
 const MIN = 60_000;
 
 describe('aggregator', () => {
+  it('carries face loss across skipped windows after a delayed alarm', () => {
+    const agg = createAggregator();
+    agg.onEvent({ type: 'face_lost', t: 10_000 });
+    expect(agg.flush(5 * MIN, 6 * MIN).faceVisibleMs).toBe(0);
+    agg.onEvent({ type: 'face_present', t: 6 * MIN + 20_000 });
+    expect(agg.flush(6 * MIN, 7 * MIN).faceVisibleMs).toBe(40_000);
+  });
   it('counts blinks within the minute', () => {
     const agg = createAggregator();
     agg.onEvent({ type: 'blink', t: 100 });

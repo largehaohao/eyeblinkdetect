@@ -12,6 +12,13 @@ export type ControlMsg =
   | { kind: 'stop' }
   | { kind: 'recalibrate' };
 
+export type DetectorStatus = {
+  state: 'OFF' | 'RUNNING' | 'PAUSED' | 'ABSENT';
+  calibration: 'idle' | 'running' | 'done' | 'failed';
+  calibrationMessage?: string;
+  lastError?: string;
+};
+
 export type ReminderDiagnostic = {
   state: 'OFF' | 'RUNNING' | 'PAUSED' | 'ABSENT';
   lastReminderAt: number;
@@ -48,6 +55,7 @@ export type UIQuery =
   | { kind: 'recalibrate' };
 
 export type UIEvent =
+  | { kind: 'detector_feedback' }
   | { kind: 'state_changed'; state: 'OFF' | 'RUNNING' | 'PAUSED' | 'ABSENT' }
   | { kind: 'minute_committed'; tsMinute: number };
 

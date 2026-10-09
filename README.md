@@ -32,7 +32,7 @@ Chrome MV3 service workers cannot access the camera directly. The extension uses
 
 - Google Chrome 109+ (offscreen documents)
 - Webcam access when detection is running
-- Node.js 18+ for development
+- Node.js 22.12+ for development (Vite 8)
 
 ## Development
 
@@ -56,9 +56,9 @@ Grant camera permission when prompted. Click the toolbar icon to start or stop d
 
 ## Usage
 
-1. **Start** — click the extension icon, then **Start**. The popup shows your current blink rate and state (`RUNNING`, `ABSENT`, `OFF`, etc.).
-2. **Calibrate** — while running, use **Calibrate** in the popup to tune EAR thresholds for your face.
-3. **Dashboard** — open **Open Dashboard** from the popup for charts, settings, and data export.
+1. **Start** — click the extension icon, then **Start tracking**. The popup shows the last five completed minutes and explains whether tracking is running, calibrating, paused, or waiting for your face.
+2. **Calibrate** — while running, use **Calibrate** in the popup or dashboard to tune EAR thresholds for your face. Keep your face visible and blink naturally for about 10 seconds; the UI reports completion or a retry suggestion.
+3. **Dashboard** — open **Open dashboard** from the popup for charts, settings, and data export.
 4. **Settings** — adjust low-BPM threshold, window/sustain minutes, cooldown, and reminder delivery on the dashboard.
 
 Default reminder rule: average below **10 blinks/min** over a **5-minute** window, sustained for **3 minutes**, with a **5-minute** cooldown.
@@ -86,7 +86,40 @@ docs/             Design specs and plans
 | `npm run typecheck` | TypeScript check |
 | `npm run test` | Run tests once |
 | `npm run test:watch` | Run tests in watch mode |
-| `npm run check` | Typecheck + test |
+| `npm run check` | Typecheck + unit/integration tests |
+| `npm run test:browser` | Build + browser regression and extension smoke tests |
+
+## Browser verification
+
+```bash
+npx playwright install chromium  # one-time test browser setup
+npm run test:browser
+```
+
+The suite checks the built pages with deterministic Chrome API fixtures: current
+BPM, chart timestamps, out-of-order range responses, empty/error states, form
+validation, denied overlay permission, exports, keyboard focus, and layouts from
+320px to 1440px. A separate smoke test loads the real extension into a temporary
+Chromium profile with a **synthetic camera**, exercises camera/inference startup,
+confirms face absence, and verifies that stopping closes the offscreen document.
+It does not use your camera or your personal browser profile. Human blink-detection
+accuracy and operating-system notification delivery still need a manual check.
+
+UI screenshots are written to `test-results/` (ignored by Git). Fixture data is
+used only in tests; production pages never generate sample history.
+
+## Interface and behavior
+
+- The popup, dashboard, and camera setup share local CSS tokens and system fonts;
+  the UI does not fetch external fonts or visual assets.
+- The dashboard offers session controls, timestamp-based trends, raw blink events,
+  persistent save/error feedback, and permission-aware reminder settings.
+- The popup rate uses a clock-based five-minute window; older stored rows are not
+  presented as current activity. Invalid/absent readings show a dash.
+- Raw event plots render at most 1,500 sampled dots for large ranges while keeping
+  the exact event count. Minute charts retain their 600-point limit.
+- Calibration progress and detector errors survive reopening the popup. Settings
+  writes are serialized to avoid overwriting concurrent preference updates.
 
 ## Privacy
 

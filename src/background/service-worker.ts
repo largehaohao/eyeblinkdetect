@@ -2,7 +2,7 @@ import { createAggregator } from '@/lib/aggregator';
 import { evaluateReminder, type ReminderConfig } from '@/lib/reminder-policy';
 import { writeMinute, getRange, writeSession, updateSessionEnd, writeBlink, getBlinks, pruneBlinks, BLINK_RETENTION_MS } from '@/lib/db';
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
-import type { DetectorMsg, ControlMsg, UIQuery, UIEvent } from '@/lib/messages';
+import type { DetectorMsg, ControlMsg, UIQuery, UIEvent, DetectorStatus } from '@/lib/messages';
 
 /** Flip to true to trace tick/reminder decisions in the service worker console. */
 const DEBUG = false;
@@ -18,6 +18,9 @@ type StoredSessionState = {
   currentMinuteStart?: number | null;
   faceEvents?: FaceEvent[];
   presentAtMinuteStart?: boolean;
+  calibration?: DetectorStatus['calibration'];
+  calibrationMessage?: string;
+  lastError?: string;
 };
 
 type FaceEvent = { type: 'face_lost' | 'face_present'; t: number };
@@ -32,6 +35,9 @@ let presentAtMinuteStart = true;
 let lastReminderAt = 0;
 let sessionId = '';
 let state: AppState = 'OFF';
+let calibration: DetectorStatus['calibration'] = 'idle';
+let calibrationMessage = '';
+let lastError = '';
 
 function nowMinute(): number {
   return Math.floor(Date.now() / 60_000) * 60_000;
@@ -48,7 +54,8 @@ async function persistSessionState(): Promise<void> {
   const writes: Promise<unknown>[] = [
     chrome.storage.session.set({
       [SESSION_KEY]: {
-        state, sessionId, lastReminderAt, currentMinuteStart, faceEvents, presentAtMinuteStart
+        state, sessionId, lastReminderAt, currentMinuteStart, faceEvents, presentAtMinuteStart,
+        calibration, calibrationMessage, lastError
       }
     })
   ];
@@ -79,6 +86,9 @@ async function hydrateRuntimeState(): Promise<void> {
   if (!saved?.state) return;
 
   state = saved.state;
+  calibration = saved.calibration ?? 'idle';
+  calibrationMessage = saved.calibrationMessage ?? '';
+  lastError = saved.lastError ?? '';
   sessionId = saved.sessionId ?? sessionId;
   lastReminderAt = saved.lastReminderAt ?? lastReminderAt;
   if (saved.currentMinuteStart !== undefined && saved.currentMinuteStart !== null) {
@@ -192,10 +202,10 @@ async function reconcileInterruptedSession(): Promise<void> {
   await chrome.storage.local.remove(ACTIVE_SESSION_KEY);
 }
 
-async function startSession(): Promise<void> {
+async function startSession(): Promise<boolean> {
   if (!await hasCameraPermission()) {
     await openPermissionPage();
-    return;
+    return false;
   }
   agg = createAggregator();
   faceEvents = [];
@@ -208,10 +218,14 @@ async function startSession(): Promise<void> {
     });
     await ensureOffscreen();
     const settings = await loadSettings();
+    lastError = '';
+    calibrationMessage = '';
+    calibration = settings.ear.personalized ? 'idle' : 'running';
     await postToOffscreen(settings.ear.personalized ? { kind: 'start' } : { kind: 'recalibrate' });
     currentMinuteStart = nowMinute();
     chrome.alarms.create('tick', { periodInMinutes: 1 });
     await setState('RUNNING');
+    return true;
   } catch (error) {
     await closeOffscreen().catch(() => {});
     await clearActiveSession(Date.now(), 'error');
@@ -219,6 +233,8 @@ async function startSession(): Promise<void> {
     currentMinuteStart = null;
     faceEvents = [];
     presentAtMinuteStart = true;
+    calibration = 'idle';
+    lastError = String(error);
     await setState('OFF');
     throw error;
   }
@@ -235,6 +251,7 @@ async function stopSession(reason: 'manual' | 'idle' | 'error'): Promise<void> {
     faceEvents = [];
     presentAtMinuteStart = true;
     sessionId = '';
+    calibration = 'idle';
     await setState('OFF');
   }
 }
@@ -262,25 +279,34 @@ async function handleDetector(m: DetectorMsg): Promise<void> {
     else await persistSessionState();
   }
   else if (m.kind === 'error') {
+    lastError = m.message;
     console.error('detector error', m);
     if (state !== 'OFF') await stopSession('error');
   }
   else if (m.kind === 'calibration_done') {
     await saveSettings({ ear: { closeThresh: m.closeThresh, openThresh: m.openThresh, personalized: true } });
+    calibration = 'done';
+    calibrationMessage = 'Calibration complete. Your personal thresholds are active.';
+    await persistSessionState();
+    await broadcast({ kind: 'detector_feedback' });
   }
   else if (m.kind === 'calibration_failed') {
     // Keep personalized:false so the next session retries instead of locking in
     // thresholds that would never register a blink.
     console.warn('[ebd] calibration rejected:', m.reason);
+    calibration = 'failed';
+    calibrationMessage = `Calibration could not finish: ${m.reason}. Face the camera in good light and try again.`;
+    await persistSessionState();
+    await broadcast({ kind: 'detector_feedback' });
   }
 }
 
 async function handleUI(q: UIQuery): Promise<unknown> {
   await ensureHydrated();
-  if (q.kind === 'status') return { state, sessionId, lastReminderAt };
+  if (q.kind === 'status') return { state, sessionId, lastReminderAt, calibration, calibrationMessage, lastError };
   if (q.kind === 'toggle') {
     return runExclusive(async () => {
-      if (q.on && state === 'OFF') await startSession();
+      if (q.on && state === 'OFF' && !await startSession()) return { state, permissionRequired: true };
       if (!q.on && state !== 'OFF') await stopSession('manual');
       return { state };
     });
@@ -299,11 +325,17 @@ async function handleUI(q: UIQuery): Promise<unknown> {
     return { ok: true };
   }
   // saveSettings() sanitizes; a malformed patch cannot poison stored settings.
-  if (q.kind === 'settings_set') return saveSettings(q.patch as Partial<Settings>);
+  // Settings are read/merge/write. Serialize UI saves with calibration saves so
+  // two pages cannot overwrite each other's independent preferences.
+  if (q.kind === 'settings_set') return runExclusive(() => saveSettings(q.patch as Partial<Settings>));
   if (q.kind === 'recalibrate') {
     return runExclusive(async () => {
       if (state !== 'RUNNING' && state !== 'ABSENT') return { ok: false };
       await postToOffscreen({ kind: 'recalibrate' });
+      calibration = 'running';
+      calibrationMessage = '';
+      await persistSessionState();
+      await broadcast({ kind: 'detector_feedback' });
       return { ok: true };
     });
   }
@@ -613,8 +645,17 @@ chrome.idle.onStateChanged.addListener(async (newState) => {
   await runExclusive(async () => {
     await ensureHydrated();
     if (newState === 'active' && state === 'PAUSED') {
-      await ensureOffscreen();
-      await postToOffscreen({ kind: 'start' });
+      try {
+        await ensureOffscreen();
+        const settings = await loadSettings();
+        calibration = settings.ear.personalized ? 'idle' : 'running';
+        calibrationMessage = '';
+        await postToOffscreen(settings.ear.personalized ? { kind: 'start' } : { kind: 'recalibrate' });
+      } catch (error) {
+        lastError = String(error);
+        await stopSession('error');
+        return;
+      }
       // Discard events buffered before the pause and clear the stale presence
       // flag; otherwise the first minute after resume reports a wrong
       // faceVisibleMs.
@@ -625,6 +666,7 @@ chrome.idle.onStateChanged.addListener(async (newState) => {
       await setState('RUNNING');
     } else if ((newState === 'idle' || newState === 'locked') && (state === 'RUNNING' || state === 'ABSENT')) {
       await postToOffscreen({ kind: 'stop' }).catch(() => {});
+      calibration = 'idle';
       currentMinuteStart = null;
       faceEvents = [];
       presentAtMinuteStart = true;
@@ -644,6 +686,9 @@ async function resetAfterInterruption(): Promise<void> {
   currentMinuteStart = null;
   faceEvents = [];
   presentAtMinuteStart = true;
+  calibration = 'idle';
+  calibrationMessage = '';
+  lastError = '';
   hydration = Promise.resolve();
   await chrome.storage.session.remove(SESSION_KEY);
   await updateBadge();

@@ -27,6 +27,11 @@ export function createAggregator() {
 
     // Replay face events within window to compute absent intervals.
     let present = presentAtFlush;
+    // Catch-up can skip whole windows. Replay their transitions before pruning
+    // so absence does not silently turn into a fully visible minute.
+    for (const ev of faceEvents) {
+      if (ev.t < startMs) present = ev.type === 'face_present';
+    }
     let absentMs = 0;
     let lastT = startMs;
 

@@ -1,0 +1,13 @@
+@import '../lib/theme.css';
+body { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; }
+main { width: min(100%, 500px); }
+.brand-mark { margin-bottom: 12px; }
+.brand-name { font-size: 12px; color: var(--color-muted); margin-bottom: 30px; }
+h1 { font: 400 clamp(32px, 7vw, 42px)/1.16 var(--font-display); letter-spacing: -.8px; }
+.intro { color: var(--color-muted); margin-top: 20px; max-width: 46ch; }
+ul { padding: 22px 0 22px 20px; margin: 18px 0 24px; border-block: 1px solid var(--color-line); font-size: 13px; }
+li { padding: 5px 0; }
+li::marker { color: var(--color-accent); }
+button, .button-link { width: 100%; min-height: 46px; }
+.status { min-height: 52px; margin: 16px 0; font-size: 12px; color: var(--color-muted); }
+main > .hint { margin-top: 20px; font-size: 11px; }
